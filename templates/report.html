@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Triage Report</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 24px; color: #1a1a1a; }
+    a.back { color: #666; font-size: 13px; text-decoration: none; display: block; margin-bottom: 20px; }
+    h1 { font-size: 22px; font-weight: 600; margin-bottom: 4px; }
+    h2 { font-size: 12px; font-weight: 500; color: #888; text-transform: uppercase; letter-spacing: .06em; margin: 28px 0 10px; }
+
+    .confidence-block { display:flex; align-items:center; gap:20px; padding:20px 24px; border-radius:12px; margin:16px 0 8px; }
+    .high-bg { background:#FCEBEB; } .medium-bg { background:#FAEEDA; } .low-bg { background:#EAF3DE; }
+    .conf-pct { font-size:42px; font-weight:700; line-height:1; }
+    .high-txt { color:#791F1F; } .medium-txt { color:#633806; } .low-txt { color:#27500A; }
+    .conf-label { font-size:13px; color:#555; line-height:1.6; }
+    .verdict-pill { display:inline-block; padding:3px 12px; border-radius:20px; font-size:12px; font-weight:600; margin-bottom:4px; }
+    .high-pill { background:#791F1F; color:#fff; } .medium-pill { background:#633806; color:#fff; } .low-pill { background:#27500A; color:#fff; }
+    .bar-bg { background:#e8e8e8; border-radius:6px; height:8px; width:200px; overflow:hidden; margin-top:6px; }
+    .bar-fill { height:100%; border-radius:6px; }
+    .high-bar { background:#c0392b; } .medium-bar { background:#d68910; } .low-bar { background:#27ae60; }
+
+    .signals-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .signals-table th { text-align:left; color:#888; font-weight:500; padding:6px 10px; border-bottom:2px solid #eee; font-size:11px; text-transform:uppercase; }
+    .signals-table td { padding:8px 10px; border-bottom:1px solid #f0f0f0; vertical-align:top; }
+    .signals-table tr:last-child td { border-bottom:none; }
+    .icon-cell { font-size:14px; width:28px; }
+    .sig-name { font-weight:500; }
+    .sig-status { font-size:11px; color:#888; font-family:monospace; }
+    .sig-detail { font-size:12px; color:#666; margin-top:2px; }
+    .contrib-pos { color:#c0392b; font-weight:500; font-family:monospace; }
+    .contrib-neg { color:#27ae60; font-weight:500; font-family:monospace; }
+    .contrib-zero { color:#aaa; font-family:monospace; }
+
+    table.info { width:100%; border-collapse:collapse; font-size:13px; }
+    table.info td, table.info th { padding:7px 10px; border-bottom:1px solid #f0f0f0; vertical-align:top; }
+    table.info th { color:#888; font-weight:500; width:160px; text-align:left; }
+    .pass { color:#27500A; font-weight:500; } .fail { color:#791F1F; font-weight:500; } .missing { color:#888; }
+    .ioc { font-family:monospace; font-size:11px; background:#f5f5f5; padding:2px 6px; border-radius:4px; display:inline-block; margin:2px; word-break:break-all; }
+    .btn { display:inline-block; margin-top:24px; padding:10px 22px; background:#1a1a1a; color:#fff; border-radius:8px; text-decoration:none; font-size:14px; }
+
+    .tag { display:inline-block; font-size:11px; padding:3px 9px; border-radius:12px; margin:2px; }
+    .tag-urgency   { background:#FFF3CD; color:#856404; border:1px solid #FFEAA7; }
+    .tag-body      { background:#FCEBEB; color:#791F1F; border:1px solid #F5C1C1; }
+    .tag-lookalike { background:#FDF0FF; color:#6A0DAD; border:1px solid #D7B8F5; }
+    .tag-qr        { background:#E8F4FD; color:#1A5276; border:1px solid #AED6F1; }
+    .tag-toogood   { background:#FFF3CD; color:#7D6608; border:1px solid #F9E4A0; }
+    .tag-attach    { background:#FCEBEB; color:#791F1F; border:1px solid #F5C1C1; }
+    .none-label    { color:#aaa; font-size:13px; font-style:italic; }
+
+    .vt-table { width:100%; border-collapse:collapse; font-size:13px; }
+    .vt-table th { text-align:left; color:#888; font-weight:500; padding:6px 10px; border-bottom:2px solid #eee; font-size:11px; text-transform:uppercase; }
+    .vt-table td { padding:8px 10px; border-bottom:1px solid #f0f0f0; vertical-align:middle; }
+    .vt-table tr:last-child td { border-bottom:none; }
+    .age-new    { color:#791F1F; font-weight:500; }
+    .age-recent { color:#633806; font-weight:500; }
+    .age-ok     { color:#27500A; }
+  </style>
+</head>
+<body>
+  <a href="/" class="back">← Analyze another email</a>
+  <h1>Triage Report</h1>
+
+  <!-- Confidence block -->
+  <div class="confidence-block {{ result.verdict }}-bg">
+    <div>
+      <div class="conf-pct {{ result.verdict }}-txt">{{ result.confidence }}%</div>
+      <div class="bar-bg">
+        <div class="bar-fill {{ result.verdict }}-bar" data-width="{{ result.confidence }}" style="width:0"></div>
+      </div>
+    </div>
+    <div class="conf-label">
+      <span class="verdict-pill {{ result.verdict }}-pill">{{ result.verdict | upper }} RISK</span><br>
+      Confidence this email is malicious.<br>
+      Based on {{ result.signals | length }} signal(s) analysed.
+    </div>
+  </div>
+
+  <!-- Signal breakdown -->
+  <h2>Signal breakdown</h2>
+  <table class="signals-table">
+    <thead>
+      <tr><th></th><th>Signal</th><th>Status</th><th>Detail</th><th>Contribution</th></tr>
+    </thead>
+    <tbody>
+      {% for s in result.signals %}
+      <tr>
+        <td class="icon-cell">{{ s.icon }}</td>
+        <td><span class="sig-name">{{ s.name }}</span></td>
+        <td><span class="sig-status">{{ s.status }}</span></td>
+        <td><span class="sig-detail">{{ s.detail }}</span></td>
+        <td>
+          {% if s.contribution > 0 %}
+            <span class="contrib-pos">+{{ s.contribution }}%</span>
+          {% elif s.contribution < 0 %}
+            <span class="contrib-neg">{{ s.contribution }}%</span>
+          {% else %}
+            <span class="contrib-zero">0%</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- Lookalike domains -->
+  <h2>Lookalike &amp; typosquatted domains</h2>
+  {% if result.lookalike_domains %}
+    {% for f in result.lookalike_domains %}
+      <div style="margin-bottom:5px"><span class="tag tag-lookalike">⚠ {{ f }}</span></div>
+    {% endfor %}
+  {% else %}
+    <span class="none-label">None detected</span>
+  {% endif %}
+
+  <!-- Urgency language -->
+  <h2>Urgency / pressure language</h2>
+  {% if result.urgency %}
+    {% for phrase in result.urgency %}
+      <span class="tag tag-urgency">{{ phrase }}</span>
+    {% endfor %}
+  {% else %}
+    <span class="none-label">None detected</span>
+  {% endif %}
+
+  <!-- Suspicious body patterns -->
+  <h2>Suspicious body patterns</h2>
+  {% if result.body_patterns %}
+    {% for p in result.body_patterns %}
+      <div style="margin-bottom:5px"><span class="tag tag-body">⚠ {{ p }}</span></div>
+    {% endfor %}
+  {% else %}
+    <span class="none-label">None detected</span>
+  {% endif %}
+
+  <!-- QR codes -->
+  <h2>QR code / quishing</h2>
+  {% if result.qr_codes %}
+    {% for q in result.qr_codes %}
+      <div style="margin-bottom:5px"><span class="tag tag-qr">⚠ {{ q }}</span></div>
+    {% endfor %}
+  {% else %}
+    <span class="none-label">None detected</span>
+  {% endif %}
+
+  <!-- Too good to be true -->
+  <h2>Scam / too-good-to-be-true language</h2>
+  {% if result.too_good %}
+    {% for t in result.too_good %}
+      <span class="tag tag-toogood">{{ t }}</span>
+    {% endfor %}
+  {% else %}
+    <span class="none-label">None detected</span>
+  {% endif %}
+
+  <!-- Risky attachments -->
+  <h2>Attachment risk analysis</h2>
+  {% if result.attachment_risks %}
+    {% for a in result.attachment_risks %}
+      <div style="margin-bottom:5px"><span class="tag tag-attach">⚠ {{ a }}</span></div>
+    {% endfor %}
+  {% else %}
+    <span class="none-label">No risky attachments detected</span>
+  {% endif %}
+
+  <!-- Key headers -->
+  <h2>Key headers</h2>
+  <table class="info">
+    {% for key, val in result.headers.items() %}
+    <tr><th>{{ key }}</th><td>{{ val or '—' }}</td></tr>
+    {% endfor %}
+  </table>
+
+  <!-- Authentication -->
+  <h2>Authentication</h2>
+  <table class="info">
+    {% for proto, status in result.authentication.items() %}
+    <tr>
+      <th>{{ proto | upper }}</th>
+      <td class="{{ 'pass' if status == 'pass' else ('fail' if status in ['fail','softfail','none'] else 'missing') }}">
+        {{ status }}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+
+  <!-- IOCs -->
+  <h2>Indicators of compromise (defanged)</h2>
+  <table class="info">
+    <tr>
+      <th>URLs</th>
+      <td>{% for u in result.iocs.urls_defanged %}<span class="ioc">{{ u }}</span>{% endfor %}{% if not result.iocs.urls_defanged %}—{% endif %}</td>
+    </tr>
+    <tr>
+      <th>Domains</th>
+      <td>{% for d in result.iocs.domains_defanged %}<span class="ioc">{{ d }}</span>{% endfor %}{% if not result.iocs.domains_defanged %}—{% endif %}</td>
+    </tr>
+    <tr>
+      <th>IPs (Received)</th>
+      <td>{% for ip in result.iocs.ips_defanged %}<span class="ioc">{{ ip }}</span>{% endfor %}{% if not result.iocs.ips_defanged %}—{% endif %}</td>
+    </tr>
+    <tr>
+      <th>Attachments</th>
+      <td>
+        {% for a in result.iocs.attachments %}
+          <span class="ioc">{{ a.filename }}</span>
+          <span style="font-size:11px;color:#888">SHA256: {{ a.sha256[:16] }}…</span><br>
+        {% endfor %}
+        {% if not result.iocs.attachments %}—{% endif %}
+      </td>
+    </tr>
+  </table>
+
+  <!-- VirusTotal enrichment -->
+  <h2>VirusTotal enrichment</h2>
+  {% if result.enrichment %}
+  <table class="vt-table">
+    <thead>
+      <tr>
+        <th>Indicator</th>
+        <th>Type</th>
+        <th>Malicious</th>
+        <th>Suspicious</th>
+        <th>Harmless</th>
+        <th>Domain age</th>
+        <th>Info</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for indicator, vt in result.enrichment.items() %}
+      {% set age = vt.get('age_days', none) %}
+      {% set mal = vt.get('malicious', 0) %}
+      {% set sus = vt.get('suspicious', 0) %}
+      {% set har = vt.get('harmless', 0) %}
+      {% set vtype = vt.get('type', 'domain') %}
+      <tr>
+        <td><span class="ioc">{{ indicator }}</span></td>
+        <td>
+          <span class="tag" style="background:#F0F0F0;color:#444;border:1px solid #ddd;font-size:10px">
+            {{ vtype }}
+          </span>
+        </td>
+        <td class="{{ 'fail' if mal > 0 else 'pass' }}">{{ mal }}</td>
+        <td>{{ sus }}</td>
+        <td>{{ har }}</td>
+        <td>
+          {% if age is not none %}
+            {% if age < 30 %}
+              <span class="age-new">{{ age }} days ⚠</span>
+            {% elif age < 90 %}
+              <span class="age-recent">{{ age }} days</span>
+            {% else %}
+              <span class="age-ok">{{ age }} days</span>
+            {% endif %}
+          {% else %}
+            <span style="color:#aaa">—</span>
+          {% endif %}
+        </td>
+        <td style="font-size:11px;color:#888">
+          {% if vt.get('owner') %}{{ vt.get('owner') }}{% endif %}
+          {% if vt.get('country') %} · {{ vt.get('country') }}{% endif %}
+          {% if vt.get('note') %}{{ vt.get('note') }}{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#888;font-size:13px">No enrichment — API key not configured or no public indicators found.</p>
+  {% endif %}
+
+  <!-- Received chain -->
+  <h2>Received chain</h2>
+  {% for hop in result.received_chain %}
+  <div style="font-family:monospace;font-size:11px;background:#f5f5f5;padding:8px 12px;border-radius:6px;margin-bottom:6px;word-break:break-all">{{ hop }}</div>
+  {% endfor %}
+
+  <a href="/report.json" class="btn" target="_blank">Download JSON</a>
+
+  <script>
+    document.querySelectorAll('[data-width]').forEach(el => {
+      el.style.width = el.dataset.width + '%';
+    });
+  </script>
+</body>
+</html>
